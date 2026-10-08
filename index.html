@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基地環境分析｜3D 互動簡報</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: "微軟正黑體", sans-serif;
+            background-color: #f4f4f4;
+            overflow-x: hidden;
+        }
+
+        /* 3D 畫布固定在背景 */
+        #webgl-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1; 
+        }
+
+        /* 捲動文字區塊設定 */
+        .scrolly-container {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            pointer-events: none; /* 讓滑鼠可以穿透文字區塊去拖曳 3D 模型 (視需求開啟) */
+        }
+
+        .step {
+            height: 100vh; /* 每個區塊佔滿一個螢幕高 */
+            display: flex;
+            align-items: center;
+            padding: 0 5%;
+        }
+
+        .step-content {
+            background: rgba(255, 255, 255, 0.85);
+            padding: 30px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            backdrop-filter: blur(5px);
+            pointer-events: auto;
+            transform: translateY(50px);
+            opacity: 0;
+            transition: all 0.5s ease-out;
+        }
+
+        /* 當進入視角時的 CSS 動畫 */
+        .step.is-active .step-content {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #333;
+            font-size: 24px;
+        }
+        p {
+            color: #555;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D 模型渲染區 -->
+    <canvas id="webgl-canvas"></canvas>
+
+    <!-- 捲動文字說明區 -->
+    <div class="scrolly-container">
+        <!-- 區塊 1 -->
+        <div class="step" id="step1">
+            <div class="step-content">
+                <h2>1. 區位與基地環境</h2>
+                <p>這裡是基地整體的俯瞰視角，展示周邊交通動線與建築分布狀況。往下滑動觀看更多分析。</p>
+            </div>
+        </div>
+        
+        <!-- 區塊 2 -->
+        <div class="step" id="step2">
+            <div class="step-content">
+                <h2>2. 建築量體與機能</h2>
+                <p>拉近視角觀看開發案主體。此處展示共構開發的樓層配置、商業空間與居住空間的劃分。</p>
+            </div>
+        </div>
+
+        <!-- 區塊 3 -->
+        <div class="step" id="step3">
+            <div class="step-content">
+                <h2>3. 日照與陰影分析</h2>
+                <p>視角切換至側視，分析不同時間點的光影變化，確保周邊住宅的日照權不受嚴重影響。</p>
+            </div>
+        </div>
+
+        <!-- 區塊 4 -->
+        <div class="step" id="step4">
+            <div class="step-content">
+                <h2>4. 綠化與景觀視野</h2>
+                <p>回到人行視角。低樓層的植栽退縮與綠化，為城市提供友善的公共空間與視覺緩衝。</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 載入 Three.js、GLTFLoader 與 GSAP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+
+    <script>
+        gsap.registerPlugin(ScrollTrigger);
+
+        // 1. 初始化 Three.js 場景
+        const canvas = document.querySelector('#webgl-canvas');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#f4f4f4'); // 背景色
+
+        // 2. 設定攝影機
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        // 設定初始視角 (對應 step1)
+        camera.position.set(0, 50, 100); 
+        camera.lookAt(0, 0, 0);
+
+        // 3. 設定渲染器
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // 4. 打光 (環境光 + 平行光)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(50, 100, 50);
+        scene.add(dirLight);
+
+        // 5. 載入您的 GLB 模型
+        const loader = new THREE.GLTFLoader();
+        let model;
+
+        // 👉 請把 'your_model.glb' 換成您自己 GLB 檔案的路徑！
+        loader.load('My Model.glb', function(gltf) {
+            model = gltf.scene;
+            
+            // 可以根據需要調整模型大小和位置
+            // model.scale.set(1, 1, 1);
+            // model.position.set(0, 0, 0);
+            
+            scene.add(model);
+        }, undefined, function(error) {
+            console.error('模型載入失敗：', error);
+        });
+
+        // 6. GSAP 捲動動畫設定 (鏡頭運鏡)
+        // 這裡定義每個區塊對應的相機位置 (x, y, z) 
+        // 您需要根據您的 3D 模型大小，自己微調這些數字
+        const cameraPositions = {
+            step1: { x: 0, y: 50, z: 100 },  // 俯視全區
+            step2: { x: 30, y: 10, z: 40 },  // 量體近景
+            step3: { x: -40, y: 20, z: 0 },  // 日照側面視角
+            step4: { x: 0, y: 2, z: 20 }     // 人行綠化視角
+        };
+
+        // 為每個 step 綁定 ScrollTrigger
+        const steps = document.querySelectorAll('.step');
+        steps.forEach((step, index) => {
+            const stepId = step.getAttribute('id');
+            const targetPos = cameraPositions[stepId];
+
+            ScrollTrigger.create({
+                trigger: step,
+                start: "top center", // 當區塊頂部到達螢幕中間時觸發
+                end: "bottom center",
+                onEnter: () => {
+                    step.classList.add('is-active');
+                    // 移動攝影機到目標位置
+                    gsap.to(camera.position, {
+                        x: targetPos.x,
+                        y: targetPos.y,
+                        z: targetPos.z,
+                        duration: 1.5,
+                        ease: "power2.inOut",
+                        onUpdate: () => camera.lookAt(0, 0, 0) // 保持看向場景中心
+                    });
+                },
+                onEnterBack: () => {
+                    step.classList.add('is-active');
+                    gsap.to(camera.position, {
+                        x: targetPos.x,
+                        y: targetPos.y,
+                        z: targetPos.z,
+                        duration: 1.5,
+                        ease: "power2.inOut",
+                        onUpdate: () => camera.lookAt(0, 0, 0)
+                    });
+                },
+                onLeave: () => step.classList.remove('is-active'),
+                onLeaveBack: () => step.classList.remove('is-active')
+            });
+        });
+
+        // 7. 渲染迴圈
+        const tick = () => {
+            renderer.render(scene, camera);
+            window.requestAnimationFrame(tick);
+        };
+        tick();
+
+        // 8. 響應式視窗縮放
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
